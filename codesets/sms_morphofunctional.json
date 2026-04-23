@@ -3,6 +3,20 @@
   "version": "2026.1",
   "description": "Morpho-functional group categories used at the Smithsonian Marine Station at Fort Pierce for fouling panel point-count analysis.",
   "author": "Smithsonian Marine Station",
+  "metadata_fields": [
+    { "name": "site_code",               "label": "Site code",               "field_type": "text",   "required": true,  "default": null },
+    { "name": "location_name",           "label": "Location name",           "field_type": "text",   "required": true,  "default": null },
+    { "name": "panel_id",                "label": "Panel ID",                "field_type": "text",   "required": true,  "default": null },
+    { "name": "deployment_year",         "label": "Deployment year",         "field_type": "number", "required": false, "default": null },
+    { "name": "deployment_month",        "label": "Deployment month",        "field_type": "number", "required": false, "default": null },
+    { "name": "deployment_day",          "label": "Deployment day",          "field_type": "number", "required": false, "default": null },
+    { "name": "retrieval_year",          "label": "Retrieval year",          "field_type": "number", "required": true,  "default": null },
+    { "name": "retrieval_month",         "label": "Retrieval month",         "field_type": "number", "required": true,  "default": null },
+    { "name": "retrieval_day",           "label": "Retrieval day",           "field_type": "number", "required": true,  "default": null },
+    { "name": "data_collector",          "label": "Data collector",          "field_type": "text",   "required": true,  "default": null },
+    { "name": "sample_processing_person","label": "Sample processing person","field_type": "text",   "required": true,  "default": null },
+    { "name": "notes",                   "label": "Notes",                   "field_type": "text",   "required": false, "default": null }
+  ],
   "codes": [
     { "code": "spg",        "name": "Sponges",                   "color": "#E69F00", "catch_all": false },
     { "code": "hyd",        "name": "Hydroids",                  "color": "#56B4E9", "catch_all": false },
