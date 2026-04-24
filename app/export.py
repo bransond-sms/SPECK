@@ -65,17 +65,17 @@ DETAILED_COLUMNS = [
 def _base_row(meta: dict, img: ImageEntry) -> dict:
     """Build the metadata portion of a row shared by both export modes."""
     return {
-        "site_code":                meta.get("site_code", ""),
-        "location_name":            meta.get("location_name", ""),
+        "site_code":                meta.get("site_code") or "",
+        "location_name":            meta.get("location_name") or "",
         "panel_id":                 img.panel_id,
-        "deployment_year":          meta.get("deployment_year", ""),
-        "deployment_month":         meta.get("deployment_month", ""),
-        "deployment_day":           meta.get("deployment_day", ""),
-        "retrieval_year":           meta.get("retrieval_year", ""),
-        "retrieval_month":          meta.get("retrieval_month", ""),
-        "retrieval_day":            meta.get("retrieval_day", ""),
-        "data_collector":           meta.get("data_collector", ""),
-        "sample_processing_person": meta.get("sample_processing_person", ""),
+        "deployment_year":          meta.get("deployment_year") or "",
+        "deployment_month":         meta.get("deployment_month") or "",
+        "deployment_day":           meta.get("deployment_day") or "",
+        "retrieval_year":           meta.get("retrieval_year") or "",
+        "retrieval_month":          meta.get("retrieval_month") or "",
+        "retrieval_day":            meta.get("retrieval_day") or "",
+        "data_collector":           meta.get("data_collector") or "",
+        "sample_processing_person": meta.get("sample_processing_person") or "",
         "photo_filename":           img.image_filename,
     }
 
@@ -231,11 +231,11 @@ def suggest_export_filename(batch: Batch, detailed: bool = False) -> str:
     meta = batch.batch_metadata
     parts = []
 
-    site = meta.get("site_code", "").strip()
-    location = meta.get("location_name", "").strip()
-    year = meta.get("retrieval_year", "")
-    month = meta.get("retrieval_month", "")
-    day = meta.get("retrieval_day", "")
+    site = str(meta.get("site_code") or "").strip()
+    location = str(meta.get("location_name") or "").strip()
+    year = meta.get("retrieval_year") or ""
+    month = meta.get("retrieval_month") or ""
+    day = meta.get("retrieval_day") or ""
 
     if site:
         parts.append(site)
