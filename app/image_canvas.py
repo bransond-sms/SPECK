@@ -1,6 +1,7 @@
 """
 image_canvas.py
-Image display, zoom/pan, boundary drawing, point overlay, and rubber-band selection.
+Image display, zoom/pan, boundary drawing, point overlay, rubber-band selection,
+grid overlay.
 
 Emits:
     point_activated(int)          -- user clicked a point (0-based index)
@@ -15,33 +16,29 @@ from PyQt6.QtGui import (
     QPainter, QPixmap, QColor, QPen, QBrush, QFont, QCursor, QFontMetrics
 )
 
-# Supported image formats
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
-# Visual constants — defaults, can be overridden via set_point_colors()
-DEFAULT_ACTIVE_COLOR     = QColor(0, 255, 255)        # Cyan  — active point
-DEFAULT_UNCLASSIFIED_COLOR = QColor(255, 0, 0)        # Red   — unclassified points
-DEFAULT_SELECTED_COLOR   = QColor(255, 165, 0)        # Orange — rubber-band selected
-BOUNDARY_COLOR           = QColor(255, 200, 0)        # Amber boundary line
-BOUNDARY_VERTEX_COLOR    = QColor(255, 220, 50)
-SELECTION_RECT_COLOR     = QColor(255, 255, 255, 80)  # Translucent white
-SELECTION_RECT_BORDER    = QColor(255, 255, 255, 200)
-CROSS_SIZE    = 8    # px half-length of crosshair arms
-CROSS_THICK   = 2    # px line width for active crosshair
-CROSS_SMALL   = 5    # px half-length for non-active cross
+DEFAULT_ACTIVE_COLOR       = QColor(0, 255, 255)       # Cyan
+DEFAULT_UNCLASSIFIED_COLOR = QColor(255, 0, 0)         # Red
+DEFAULT_SELECTED_COLOR     = QColor(255, 165, 0)       # Orange
+BOUNDARY_COLOR             = QColor(255, 200, 0)       # Amber
+BOUNDARY_VERTEX_COLOR      = QColor(255, 220, 50)
+SELECTION_RECT_COLOR       = QColor(255, 255, 255, 80)
+SELECTION_RECT_BORDER      = QColor(255, 255, 255, 200)
+GRID_OVERLAY_COLOR         = QColor(255, 255, 255, 50) # Translucent white grid
+
+CROSS_SIZE       = 12   # px half-length, active point (was 8)
+CROSS_THICK      = 2    # px line width, active point
+CROSS_SMALL      = 8    # px half-length, non-active (was 5)
+CROSS_SMALL_THICK = 1   # px line width, non-active
 POINT_HIT_RADIUS = 12
 FONT_SIZE = 9
 
 
 class ImageCanvas(QWidget):
-    """
-    Custom widget for image display, boundary drawing, and point overlay.
-    All coordinates stored internally are image-space (unscaled).
-    """
-
-    point_activated  = pyqtSignal(int)   # 0-based index
-    boundary_complete = pyqtSignal(list) # list of (x,y) tuples
-    points_selected  = pyqtSignal(list)  # list of 0-based indices
+    point_activated   = pyqtSignal(int)
+    boundary_complete = pyqtSignal(list)
+    points_selected   = pyqtSignal(list)
 
     MODE_VIEW     = "view"
     MODE_BOUNDARY = "boundary"
@@ -67,7 +64,6 @@ class ImageCanvas(QWidget):
         self._boundary_final: list[tuple] = []
         self._cursor_pos: QPointF | None = None
 
-        # Rubber-band selection
         self._select_start: QPointF | None = None
         self._select_rect: QRectF | None = None
 
@@ -75,12 +71,17 @@ class ImageCanvas(QWidget):
         self._active_index: int = -1
         self._selected_indices: set[int] = set()
         self._show_all_points: bool = False
+        self._show_grid_overlay: bool = False
         self._code_colors: dict[str, QColor] = {}
 
-        # Configurable point colors
-        self._active_color      = DEFAULT_ACTIVE_COLOR
+        # Grid overlay parameters (set from main_window after grid generation)
+        self._grid_type: str = ""
+        self._grid_rows: int = 0
+        self._grid_cols: int = 0
+
+        self._active_color       = DEFAULT_ACTIVE_COLOR
         self._unclassified_color = DEFAULT_UNCLASSIFIED_COLOR
-        self._selected_color    = DEFAULT_SELECTED_COLOR
+        self._selected_color     = DEFAULT_SELECTED_COLOR
 
         self._font = QFont("Arial", FONT_SIZE)
         self._font_metrics = QFontMetrics(self._font)
@@ -101,6 +102,7 @@ class ImageCanvas(QWidget):
         self._points = []
         self._active_index = -1
         self._selected_indices = set()
+        self._show_grid_overlay = False
         self._fit_to_window()
         self.update()
         return True
@@ -115,12 +117,41 @@ class ImageCanvas(QWidget):
         self._active_index = index
         self.update()
 
+    def set_active_point_and_center(self, index: int) -> None:
+        """
+        Set the active point and, if zoomed in, pan so the point is
+        centered in the visible canvas area.
+        """
+        self._active_index = index
+        if 0 <= index < len(self._points):
+            point = self._points[index]
+            wx, wy = self._image_to_widget(point.x, point.y)
+            cw, ch = self.width(), self.height()
+            margin = 80  # px from edge before we consider it "out of view"
+            if not (margin < wx < cw - margin and margin < wy < ch - margin):
+                # Reposition offset so the point lands at canvas center
+                self._offset = QPointF(
+                    cw / 2 - point.x * self._scale,
+                    ch / 2 - point.y * self._scale,
+                )
+                self._clamp_offset()
+        self.update()
+
     def set_show_all_points(self, show_all: bool) -> None:
         self._show_all_points = show_all
         self.update()
 
+    def set_show_grid_overlay(self, show: bool) -> None:
+        self._show_grid_overlay = show
+        self.update()
+
+    def set_grid_params(self, grid_type: str, rows: int, cols: int) -> None:
+        """Supply grid parameters so the overlay can draw the cell structure."""
+        self._grid_type = grid_type
+        self._grid_rows = rows
+        self._grid_cols = cols
+
     def set_point_colors(self, active: QColor, unclassified: QColor) -> None:
-        """Allow user to override default point colors."""
         self._active_color = active
         self._unclassified_color = unclassified
         self.update()
@@ -153,7 +184,6 @@ class ImageCanvas(QWidget):
         self.update()
 
     def start_selection_mode(self) -> None:
-        """Enter rubber-band multi-point selection mode."""
         self._mode = self.MODE_SELECT
         self._selected_indices = set()
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
@@ -234,11 +264,11 @@ class ImageCanvas(QWidget):
 
         if not self._pixmap:
             painter.setPen(QColor(120, 120, 120))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
-                             "No image loaded.\nUse File menu to open an image or start a batch.")
+            painter.drawText(
+                self.rect(), Qt.AlignmentFlag.AlignCenter,
+                "No image loaded.\nUse File menu to open an image or start a batch.")
             return
 
-        # Image
         from PyQt6.QtGui import QTransform
         painter.setTransform(
             QTransform()
@@ -247,6 +277,10 @@ class ImageCanvas(QWidget):
         )
         painter.drawPixmap(0, 0, self._pixmap)
         painter.resetTransform()
+
+        # Grid overlay (before boundary so boundary draws on top)
+        if self._show_grid_overlay:
+            self._draw_grid_overlay(painter)
 
         # Boundary
         if self._boundary_final:
@@ -262,11 +296,58 @@ class ImageCanvas(QWidget):
         # Points
         self._draw_points(painter)
 
-        # Rubber-band selection rectangle
+        # Rubber-band selection rect
         if self._select_rect:
             painter.setPen(QPen(SELECTION_RECT_BORDER, 1, Qt.PenStyle.DashLine))
             painter.setBrush(QBrush(SELECTION_RECT_COLOR))
             painter.drawRect(self._select_rect)
+
+    def _draw_grid_overlay(self, painter: QPainter) -> None:
+        """
+        Draw a translucent cell grid over the boundary area.
+        Only meaningful for uniform and stratified grids.
+        For random grids just re-draws the boundary outline.
+        """
+        if not self._boundary_final or len(self._boundary_final) < 3:
+            return
+
+        pen = QPen(GRID_OVERLAY_COLOR, 1, Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Bounding box of the boundary in image space
+        xs = [v[0] for v in self._boundary_final]
+        ys = [v[1] for v in self._boundary_final]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        rows = max(self._grid_rows, 1)
+        cols = max(self._grid_cols, 1)
+
+        if self._grid_type == "random":
+            # No grid structure — just highlight the boundary fill
+            wpts = [QPointF(*self._image_to_widget(*v)) for v in self._boundary_final]
+            from PyQt6.QtGui import QPolygonF
+            painter.setBrush(QBrush(QColor(255, 255, 255, 20)))
+            painter.drawPolygon(QPolygonF(wpts))
+            return
+
+        cell_w = (max_x - min_x) / cols
+        cell_h = (max_y - min_y) / rows
+
+        # Draw vertical lines
+        for c in range(cols + 1):
+            ix = min_x + c * cell_w
+            wx1, wy1 = self._image_to_widget(ix, min_y)
+            wx2, wy2 = self._image_to_widget(ix, max_y)
+            painter.drawLine(QPointF(wx1, wy1), QPointF(wx2, wy2))
+
+        # Draw horizontal lines
+        for r in range(rows + 1):
+            iy = min_y + r * cell_h
+            wx1, wy1 = self._image_to_widget(min_x, iy)
+            wx2, wy2 = self._image_to_widget(max_x, iy)
+            painter.drawLine(QPointF(wx1, wy1), QPointF(wx2, wy2))
 
     def _draw_boundary(self, painter, vertices, final):
         if not vertices:
@@ -286,11 +367,8 @@ class ImageCanvas(QWidget):
             painter.drawEllipse(pt, 4, 4)
 
     def _draw_cross(self, painter, wx, wy, size, thick, color, outline=True):
-        """Draw a cross/X marker centered at (wx, wy)."""
         if outline:
-            # Black outline for contrast
-            ol_pen = QPen(QColor(0, 0, 0), thick + 2)
-            painter.setPen(ol_pen)
+            painter.setPen(QPen(QColor(0, 0, 0), thick + 2))
             painter.drawLine(QPointF(wx - size, wy), QPointF(wx + size, wy))
             painter.drawLine(QPointF(wx, wy - size), QPointF(wx, wy + size))
         painter.setPen(QPen(color, thick))
@@ -300,7 +378,6 @@ class ImageCanvas(QWidget):
     def _draw_points(self, painter):
         if not self._points:
             return
-
         for i, point in enumerate(self._points):
             is_active   = (i == self._active_index)
             is_selected = (i in self._selected_indices)
@@ -314,19 +391,17 @@ class ImageCanvas(QWidget):
                 color = (self._code_colors.get(point.code, self._active_color)
                          if point.code else self._active_color)
                 self._draw_cross(painter, wx, wy, CROSS_SIZE, CROSS_THICK, color)
-                # Point number label
                 painter.setPen(QColor(255, 255, 255))
-                painter.drawText(QPointF(wx + CROSS_SIZE + 2, wy - CROSS_SIZE), str(point.index))
-
+                painter.drawText(
+                    QPointF(wx + CROSS_SIZE + 2, wy - CROSS_SIZE), str(point.index))
             elif is_selected:
-                self._draw_cross(painter, wx, wy, CROSS_SMALL, 2, self._selected_color)
-
+                self._draw_cross(
+                    painter, wx, wy, CROSS_SMALL, CROSS_SMALL_THICK, self._selected_color)
             else:
-                if point.code:
-                    color = self._code_colors.get(point.code, QColor(180, 180, 180))
-                else:
-                    color = self._unclassified_color
-                self._draw_cross(painter, wx, wy, CROSS_SMALL, 1, color)
+                color = (self._code_colors.get(point.code, QColor(180, 180, 180))
+                         if point.code else self._unclassified_color)
+                self._draw_cross(
+                    painter, wx, wy, CROSS_SMALL, CROSS_SMALL_THICK, color)
 
     # ------------------------------------------------------------------
     # Mouse events
@@ -337,7 +412,6 @@ class ImageCanvas(QWidget):
             return
         pos = event.position()
 
-        # Middle button pan (any mode)
         if event.button() == Qt.MouseButton.MiddleButton:
             self._pan_start = pos
             self._pan_offset_start = QPointF(self._offset)
@@ -370,7 +444,6 @@ class ImageCanvas(QWidget):
         if not self._pixmap:
             return
         pos = event.position()
-
         if self._mode == self.MODE_BOUNDARY:
             if event.button() == Qt.MouseButton.LeftButton:
                 ix, iy = self._widget_to_image(pos.x(), pos.y())
@@ -427,12 +500,11 @@ class ImageCanvas(QWidget):
 
         if self._mode == self.MODE_SELECT:
             if event.button() == Qt.MouseButton.LeftButton and self._select_rect:
-                # Find all points within the selection rectangle
-                hits = []
-                for i, point in enumerate(self._points):
-                    wx, wy = self._image_to_widget(point.x, point.y)
-                    if self._select_rect.contains(QPointF(wx, wy)):
-                        hits.append(i)
+                hits = [
+                    i for i, point in enumerate(self._points)
+                    if self._select_rect.contains(
+                        QPointF(*self._image_to_widget(point.x, point.y)))
+                ]
                 self._selected_indices = set(hits)
                 self._select_start = None
                 self._select_rect = None
