@@ -25,7 +25,8 @@ BOUNDARY_COLOR             = QColor(255, 200, 0)       # Amber
 BOUNDARY_VERTEX_COLOR      = QColor(255, 220, 50)
 SELECTION_RECT_COLOR       = QColor(255, 255, 255, 80)
 SELECTION_RECT_BORDER      = QColor(255, 255, 255, 200)
-GRID_OVERLAY_COLOR         = QColor(255, 255, 255, 50) # Translucent white grid
+GRID_OVERLAY_COLOR         = QColor(255, 255, 255, 140) # Translucent white grid
+GRID_OVERLAY_THICKNESS     = 2   # px line width for grid overlay
 
 CROSS_SIZE       = 12   # px half-length, active point (was 8)
 CROSS_THICK      = 2    # px line width, active point
@@ -119,22 +120,18 @@ class ImageCanvas(QWidget):
 
     def set_active_point_and_center(self, index: int) -> None:
         """
-        Set the active point and, if zoomed in, pan so the point is
-        centered in the visible canvas area.
+        Set the active point and pan so it is centered in the canvas.
+        Always centers regardless of whether the point is already visible.
         """
         self._active_index = index
         if 0 <= index < len(self._points):
             point = self._points[index]
-            wx, wy = self._image_to_widget(point.x, point.y)
             cw, ch = self.width(), self.height()
-            margin = 80  # px from edge before we consider it "out of view"
-            if not (margin < wx < cw - margin and margin < wy < ch - margin):
-                # Reposition offset so the point lands at canvas center
-                self._offset = QPointF(
-                    cw / 2 - point.x * self._scale,
-                    ch / 2 - point.y * self._scale,
-                )
-                self._clamp_offset()
+            self._offset = QPointF(
+                cw / 2 - point.x * self._scale,
+                ch / 2 - point.y * self._scale,
+            )
+            self._clamp_offset()
         self.update()
 
     def set_show_all_points(self, show_all: bool) -> None:
@@ -311,7 +308,7 @@ class ImageCanvas(QWidget):
         if not self._boundary_final or len(self._boundary_final) < 3:
             return
 
-        pen = QPen(GRID_OVERLAY_COLOR, 1, Qt.PenStyle.SolidLine)
+        pen = QPen(GRID_OVERLAY_COLOR, GRID_OVERLAY_THICKNESS, Qt.PenStyle.SolidLine)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
