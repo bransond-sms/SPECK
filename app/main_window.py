@@ -177,6 +177,12 @@ class MainWindow(QMainWindow):
         act_fit.triggered.connect(lambda: self._canvas.fit_to_window())
         view_menu.addAction(act_fit)
 
+        self._act_toggle_grid = QAction("Show &Grid Overlay", self)
+        self._act_toggle_grid.setShortcut(QKeySequence("Ctrl+Shift+G"))
+        self._act_toggle_grid.setCheckable(True)
+        self._act_toggle_grid.triggered.connect(self._on_toggle_grid)
+        view_menu.addAction(self._act_toggle_grid)
+
         act_colors = QAction("Point &Colors...", self)
         act_colors.triggered.connect(self._on_point_colors)
         view_menu.addAction(act_colors)
@@ -196,7 +202,8 @@ class MainWindow(QMainWindow):
             self._act_new_batch, self._act_open_image, self._act_open,
             self._act_save, None,
             self._act_draw_boundary, self._act_generate_grid, None,
-            self._act_toggle_points, self._act_select_points,
+            self._act_toggle_points, self._act_toggle_grid,
+            self._act_select_points,
             self._act_undo, None,
             self._act_prev_image, self._act_next_image, None,
             self._act_export_summary,
@@ -407,7 +414,7 @@ class MainWindow(QMainWindow):
         if not self._point_manager.points:
             return
         index = max(0, min(index, len(self._point_manager.points) - 1))
-        self._canvas.set_active_point(index)
+        self._canvas.set_active_point_and_center(index)
         self._notes_field.blockSignals(True)
         self._notes_field.setPlainText(self._point_manager.points[index].notes or "")
         self._notes_field.blockSignals(False)
@@ -499,6 +506,9 @@ class MainWindow(QMainWindow):
         if img.status == ImageEntry.STATUS_UNTOUCHED:
             img.status = ImageEntry.STATUS_IN_PROGRESS
 
+        # Push grid params to canvas for overlay drawing
+        self._canvas.set_grid_params(gt, rows, cols)
+
         self._refresh_canvas_points()
         self._rebuild_points_list()
         self._update_progress()
@@ -526,6 +536,12 @@ class MainWindow(QMainWindow):
         point_data = img.get_point_data()
         if point_data and point_data.get("points"):
             self._point_manager.from_dict(point_data)
+            # Restore grid params for overlay
+            self._canvas.set_grid_params(
+                img.grid_type or self._batch.batch_metadata.get("grid_type", ""),
+                img.grid_rows or self._batch.batch_metadata.get("grid_rows", 0),
+                img.grid_cols or self._batch.batch_metadata.get("grid_cols", 0),
+            )
             self._refresh_canvas_points()
             self._rebuild_points_list()
             self._update_progress()
@@ -602,6 +618,12 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Codeset error", str(e))
             return
 
+        # Grid configuration for single image
+        grid_dlg = GridConfigDialog(self)
+        if grid_dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        grid_cfg = grid_dlg.result()
+
         # Build a single-image batch
         image_dir = os.path.dirname(path)
         batch = Batch()
@@ -609,12 +631,7 @@ class MainWindow(QMainWindow):
         batch.codeset_path = cs_path
         batch.image_dir    = image_dir
         batch.batch_metadata = cs.empty_metadata()
-        batch.batch_metadata.update({
-            "grid_type": "stratified",
-            "grid_rows": 10,
-            "grid_cols": 10,
-            "grid_n":    100,
-        })
+        batch.batch_metadata.update(grid_cfg)
 
         entry = ImageEntry(path)
         batch.images = [entry]
@@ -722,6 +739,9 @@ class MainWindow(QMainWindow):
 
     def _on_toggle_points(self, checked: bool):
         self._canvas.set_show_all_points(checked)
+
+    def _on_toggle_grid(self, checked: bool):
+        self._canvas.set_show_grid_overlay(checked)
 
     def _on_start_selection(self):
         if not self._point_manager.points:
@@ -919,6 +939,7 @@ class MainWindow(QMainWindow):
         self._act_copy_boundary.setEnabled(has_batch)
         self._act_generate_grid.setEnabled(has_batch)
         self._act_toggle_points.setEnabled(has_points)
+        self._act_toggle_grid.setEnabled(has_points)
         self._act_select_points.setEnabled(has_points)
         self._act_undo.setEnabled(has_points)
 
@@ -980,6 +1001,78 @@ class MainWindow(QMainWindow):
                 event.ignore()
         else:
             event.accept()
+
+
+# ------------------------------------------------------------------
+# Grid Configuration Dialog (used for single image mode)
+# ------------------------------------------------------------------
+
+class GridConfigDialog(QDialog):
+    """Lightweight grid config dialog for single-image mode."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Grid Configuration")
+        self.setMinimumWidth(320)
+        self.setFont(APP_FONT)
+        self._result: dict = {}
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("<b>Grid Configuration</b>"))
+
+        form = QFormLayout()
+        self._grid_type = QComboBox()
+        self._grid_type.addItems(["Stratified Random", "Uniform", "Random"])
+        self._grid_type.currentIndexChanged.connect(self._on_type_changed)
+        form.addRow("Grid type:", self._grid_type)
+
+        self._rows = QSpinBox()
+        self._rows.setRange(1, 50)
+        self._rows.setValue(10)
+        form.addRow("Rows:", self._rows)
+
+        self._cols = QSpinBox()
+        self._cols.setRange(1, 50)
+        self._cols.setValue(10)
+        form.addRow("Columns:", self._cols)
+
+        self._n = QSpinBox()
+        self._n.setRange(1, 1000)
+        self._n.setValue(100)
+        self._n.setEnabled(False)
+        form.addRow("Number of points (random only):", self._n)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_type_changed(self, index: int):
+        is_random = (index == 2)
+        self._rows.setEnabled(not is_random)
+        self._cols.setEnabled(not is_random)
+        self._n.setEnabled(is_random)
+
+    def _on_accept(self):
+        type_map = {
+            "Stratified Random": "stratified",
+            "Uniform": "uniform",
+            "Random": "random",
+        }
+        self._result = {
+            "grid_type": type_map[self._grid_type.currentText()],
+            "grid_rows": self._rows.value(),
+            "grid_cols": self._cols.value(),
+            "grid_n":    self._n.value(),
+        }
+        self.accept()
+
+    def result(self) -> dict:
+        return self._result
 
 
 # ------------------------------------------------------------------
