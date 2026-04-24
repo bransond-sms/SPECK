@@ -301,12 +301,23 @@ class ImageCanvas(QWidget):
 
     def _draw_grid_overlay(self, painter: QPainter) -> None:
         """
-        Draw a translucent cell grid over the boundary area.
+        Draw a translucent cell grid clipped to the boundary polygon.
         Only meaningful for uniform and stratified grids.
-        For random grids just re-draws the boundary outline.
+        For random grids just fills the boundary area.
         """
         if not self._boundary_final or len(self._boundary_final) < 3:
             return
+
+        from PyQt6.QtGui import QPainterPath, QPolygonF
+
+        # Build boundary polygon in widget space for clipping
+        wpts = [QPointF(*self._image_to_widget(*v)) for v in self._boundary_final]
+        clip_path = QPainterPath()
+        clip_path.addPolygon(QPolygonF(wpts))
+        clip_path.closeSubpath()
+
+        painter.save()
+        painter.setClipPath(clip_path)
 
         pen = QPen(GRID_OVERLAY_COLOR, GRID_OVERLAY_THICKNESS, Qt.PenStyle.SolidLine)
         painter.setPen(pen)
@@ -322,11 +333,11 @@ class ImageCanvas(QWidget):
         cols = max(self._grid_cols, 1)
 
         if self._grid_type == "random":
-            # No grid structure — just highlight the boundary fill
-            wpts = [QPointF(*self._image_to_widget(*v)) for v in self._boundary_final]
-            from PyQt6.QtGui import QPolygonF
-            painter.setBrush(QBrush(QColor(255, 255, 255, 20)))
-            painter.drawPolygon(QPolygonF(wpts))
+            # No grid structure — shade the boundary area
+            painter.setBrush(QBrush(QColor(255, 255, 255, 40)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPath(clip_path)
+            painter.restore()
             return
 
         cell_w = (max_x - min_x) / cols
@@ -345,6 +356,8 @@ class ImageCanvas(QWidget):
             wx1, wy1 = self._image_to_widget(min_x, iy)
             wx2, wy2 = self._image_to_widget(max_x, iy)
             painter.drawLine(QPointF(wx1, wy1), QPointF(wx2, wy2))
+
+        painter.restore()
 
     def _draw_boundary(self, painter, vertices, final):
         if not vertices:
