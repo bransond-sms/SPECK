@@ -46,12 +46,12 @@ pip install -r requirements.txt
 # Run the application
 python main.py
 
-Code Sets
+# Code Sets
 SPECK uses JSON code set files to define classification codes. These files live in the codesets/ directory and can be created, edited, and shared independently of the application.
 An example code set for SMS fouling panel morpho-functional groups is included at codesets/sms_morphofunctional.json.
 See docs/codeset_format.md for the full specification (coming soon).
 
-Project Structure
+# Project Structure
 SPECK/
 ├── main.py                  # Application entry point
 ├── requirements.txt
@@ -66,11 +66,11 @@ SPECK/
 ├── sessions/                # Default session save location
 └── docs/
 
-Contributing
+# Contributing
 Contributions are welcome. If you maintain a code set for a different research context, consider submitting it as a pull request to the codesets/ directory so other researchers can use it.
 
-License
+# License
 MIT License. See LICENSE for details.
 
-Acknowledgements
+# Acknowledgements
 SPECK was developed at the Smithsonian Marine Station at Fort Pierce by researchers David Branson and Dean Janiak.
