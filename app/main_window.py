@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QFormLayout, QComboBox, QSpinBox,
     QGridLayout, QSizePolicy, QTextEdit, QColorDialog
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSlot
+from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSlot
 from PyQt6.QtGui import (
     QAction, QKeySequence, QFont, QColor, QIcon, QPixmap
 )
@@ -50,9 +50,10 @@ class MainWindow(QMainWindow):
         self._session_filepath: str | None = None
         self._unsaved_changes: bool = False
 
-        # Point colors (user-configurable)
-        self._active_color      = QColor(0, 255, 255)   # Cyan
-        self._unclassified_color = QColor(255, 0, 0)    # Red
+        # Point colors (user-configurable, persisted via QSettings)
+        _s = QSettings("SPECK", "SPECK")
+        self._active_color      = QColor(_s.value("point_colors/active",      "#00ffff"))
+        self._unclassified_color = QColor(_s.value("point_colors/unclassified", "#ff0000"))
 
         self._build_menu()
         self._build_toolbar()
@@ -111,6 +112,14 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self._act_export_summary)
         file_menu.addAction(self._act_export_detailed)
+        file_menu.addSeparator()
+
+        # Codeset tools submenu
+        codeset_menu = file_menu.addMenu("&Codeset Tools")
+        act_import_csv = QAction("&Import Taxon CSV...", self)
+        act_import_csv.triggered.connect(self._on_import_taxon_csv)
+        codeset_menu.addAction(act_import_csv)
+
         file_menu.addSeparator()
         file_menu.addAction(act_quit)
 
@@ -530,6 +539,16 @@ class MainWindow(QMainWindow):
             self._set_status(f"Could not load: {img.image_filename}")
             return
 
+        # Read GPS from EXIF if not already stored for this image
+        if img.gps_lat is None and img.gps_lon is None:
+            from app.exif_reader import read_exif
+            exif = read_exif(img.image_path)
+            if exif.has_gps:
+                img.gps_lat = exif.gps_lat
+                img.gps_lon = exif.gps_lon
+                img.gps_alt = exif.gps_alt
+                self._unsaved_changes = True
+
         if img.boundary:
             self._canvas.set_boundary(img.boundary)
 
@@ -666,20 +685,21 @@ class MainWindow(QMainWindow):
         if path:
             self._load_batch(path)
 
-    def _on_save_batch(self):
+    def _on_save_batch(self) -> bool:
         if self._session_filepath:
-            self._save_batch(self._session_filepath)
+            return self._save_batch(self._session_filepath)
         else:
-            self._on_save_batch_as()
+            return self._on_save_batch_as()
 
-    def _on_save_batch_as(self):
+    def _on_save_batch_as(self) -> bool:
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Batch", "", "SPECK Session (*.speck)")
         if path:
             if not path.endswith(".speck"):
                 path += ".speck"
             self._session_filepath = path
-            self._save_batch(path)
+            return self._save_batch(path)
+        return False
 
     def _on_export_summary(self):
         self._do_export(detailed=False)
@@ -778,6 +798,13 @@ class MainWindow(QMainWindow):
             self._unclassified_color = unclass
 
         self._canvas.set_point_colors(self._active_color, self._unclassified_color)
+        _s = QSettings("SPECK", "SPECK")
+        _s.setValue("point_colors/active",      self._active_color.name())
+        _s.setValue("point_colors/unclassified", self._unclassified_color.name())
+
+    def _on_import_taxon_csv(self):
+        dlg = TaxonCSVImportDialog(self)
+        dlg.exec()
 
     def _on_about(self):
         QMessageBox.about(
@@ -864,16 +891,18 @@ class MainWindow(QMainWindow):
         except (FileNotFoundError, ValueError, KeyError) as e:
             QMessageBox.critical(self, "Error loading batch", str(e))
 
-    def _save_batch(self, filepath: str):
+    def _save_batch(self, filepath: str) -> bool:
         if not self._batch:
-            return
+            return True
         self._save_current_image_state()
         try:
             self._batch.save(filepath)
             self._unsaved_changes = False
             self._set_status(f"Saved: {os.path.basename(filepath)}")
+            return True
         except OSError as e:
             QMessageBox.critical(self, "Error saving", str(e))
+            return False
 
     def _save_current_image_state(self):
         if not self._batch or not self._batch.current_image:
@@ -918,7 +947,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Export complete", msg)
             else:
                 QMessageBox.information(self, "Export complete", msg)
-        except OSError as e:
+        except Exception as e:
             QMessageBox.critical(self, "Export error", str(e))
 
     # ------------------------------------------------------------------
@@ -993,8 +1022,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Save)
             if reply == QMessageBox.StandardButton.Save:
-                self._on_save_batch()
-                event.accept()
+                if self._on_save_batch():
+                    event.accept()
+                else:
+                    event.ignore()
             elif reply == QMessageBox.StandardButton.Discard:
                 event.accept()
             else:
@@ -1148,6 +1179,14 @@ class NewBatchWizard(QDialog):
         self._metadata_widgets: dict[str, QWidget] = {}
         layout.addLayout(self._metadata_form)
 
+        # EXIF pre-fill note (hidden until EXIF data found)
+        self._exif_note = QLabel("")
+        self._exif_note.setFont(APP_FONT)
+        self._exif_note.setWordWrap(True)
+        self._exif_note.setStyleSheet("color: #888; padding: 2px 0;")
+        self._exif_note.setVisible(False)
+        layout.addWidget(self._exif_note)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |
             QDialogButtonBox.StandardButton.Cancel)
@@ -1167,6 +1206,36 @@ class NewBatchWizard(QDialog):
             count = sum(1 for f in os.listdir(path)
                         if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS)
             self._img_count.setText(f"{count} image(s) found.")
+            self._prefill_from_exif(path)
+
+    def _prefill_from_exif(self, directory: str):
+        """Attempt to pre-fill metadata form fields from EXIF of first usable image."""
+        from app.exif_reader import read_exif_from_directory
+        exif = read_exif_from_directory(directory)
+        if not exif.has_datetime and not exif.has_gps:
+            return
+
+        prefilled = []
+
+        if exif.has_datetime:
+            for field_name, value in [
+                ("retrieval_year",  exif.retrieval_year),
+                ("retrieval_month", exif.retrieval_month),
+                ("retrieval_day",   exif.retrieval_day),
+            ]:
+                w = self._metadata_widgets.get(field_name)
+                if w and isinstance(w, QLineEdit) and not w.text().strip():
+                    w.setText(str(value))
+                    prefilled.append(field_name.replace("_", " "))
+
+        if prefilled:
+            note = (
+                f"<i>Some fields pre-filled from image EXIF data "
+                f"({', '.join(prefilled)}). "
+                f"Verify these match your actual retrieval date.</i>"
+            )
+            self._exif_note.setText(note)
+            self._exif_note.setVisible(True)
 
     def _browse_codeset(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1269,3 +1338,179 @@ class NewBatchWizard(QDialog):
 
     def result(self) -> dict:
         return self._result
+
+
+# ------------------------------------------------------------------
+# Taxon CSV Import Dialog
+# ------------------------------------------------------------------
+
+class TaxonCSVImportDialog(QDialog):
+    """
+    Import a two-column taxon CSV (label, taxon) and convert it to a
+    SPECK codeset JSON file, with auto-assigned colors.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Import Taxon CSV")
+        self.setMinimumWidth(480)
+        self.setFont(APP_FONT)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._section("Import Taxon CSV to Codeset"))
+
+        # CSV file row
+        form = QFormLayout()
+        self._csv_edit = QLineEdit()
+        self._csv_edit.setReadOnly(True)
+        csv_btn = QPushButton("Browse...")
+        csv_btn.clicked.connect(self._browse_csv)
+        csv_row = QHBoxLayout()
+        csv_row.addWidget(self._csv_edit)
+        csv_row.addWidget(csv_btn)
+        form.addRow("CSV file:", csv_row)
+
+        # Codeset metadata
+        self._name_edit = QLineEdit()
+        self._name_edit.setPlaceholderText("e.g. My Lab Fouling Panel Codes")
+        form.addRow("Codeset name*:", self._name_edit)
+
+        self._author_edit = QLineEdit()
+        self._author_edit.setPlaceholderText("e.g. Jane Smith")
+        form.addRow("Author:", self._author_edit)
+
+        self._version_edit = QLineEdit()
+        self._version_edit.setText("1.0")
+        form.addRow("Version:", self._version_edit)
+
+        self._desc_edit = QLineEdit()
+        self._desc_edit.setPlaceholderText("Optional description")
+        form.addRow("Description:", self._desc_edit)
+
+        layout.addLayout(form)
+
+        # Validation output
+        layout.addWidget(self._section("Validation"))
+        self._validation_output = QTextEdit()
+        self._validation_output.setReadOnly(True)
+        self._validation_output.setMaximumHeight(120)
+        self._validation_output.setFont(APP_FONT)
+        self._validation_output.setPlaceholderText(
+            "Select a CSV file to see validation results.")
+        layout.addWidget(self._validation_output)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        self._preview_btn = QPushButton("Validate")
+        self._preview_btn.clicked.connect(self._on_validate)
+        self._import_btn = QPushButton("Import and Save...")
+        self._import_btn.clicked.connect(self._on_import)
+        self._import_btn.setEnabled(False)
+        cancel_btn = QPushButton("Close")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(self._preview_btn)
+        btn_row.addWidget(self._import_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
+
+        self._valid_rows: list[dict] = []
+
+    def _section(self, text: str) -> QLabel:
+        lbl = QLabel(f"<b>{text}</b>")
+        lbl.setFont(APP_FONT)
+        return lbl
+
+    def _browse_csv(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select taxon CSV", "", "CSV files (*.csv);;All files (*)")
+        if path:
+            self._csv_edit.setText(path)
+            self._on_validate()
+
+    def _on_validate(self):
+        from tools.csv_to_codeset import load_csv, MAX_LABEL_LENGTH
+        path = self._csv_edit.text().strip()
+        if not path:
+            self._validation_output.setPlainText("No file selected.")
+            return
+
+        rows, errors = load_csv(path)
+        self._valid_rows = rows
+
+        lines = []
+        if errors:
+            lines.append(f"Found {len(errors)} problem(s):\n")
+            lines.extend(f"  • {e}" for e in errors)
+            lines.append("")
+        if rows:
+            lines.append(f"✓ {len(rows)} valid entries found.")
+            if not errors:
+                lines.append("Ready to import.")
+
+        self._validation_output.setPlainText("\n".join(lines))
+        # Allow import even if there are warnings, as long as there are valid rows
+        # Block only on structural errors (no rows parsed at all)
+        self._import_btn.setEnabled(bool(rows))
+
+    def _on_import(self):
+        from tools.csv_to_codeset import convert
+
+        name = self._name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Required", "Please enter a codeset name.")
+            return
+
+        # Suggest filename from codeset name
+        safe_name = "".join(
+            c if c.isalnum() or c in "-_" else "_" for c in name
+        ).lower()
+        suggested = os.path.join("codesets", safe_name + ".json")
+
+        out_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Codeset JSON", suggested, "JSON files (*.json)")
+        if not out_path:
+            return
+        if not out_path.endswith(".json"):
+            out_path += ".json"
+
+        success, messages = convert(
+            input_path  = self._csv_edit.text().strip(),
+            output_path = out_path,
+            name        = name,
+            version     = self._version_edit.text().strip() or "1.0",
+            description = self._desc_edit.text().strip(),
+            author      = self._author_edit.text().strip(),
+        )
+
+        if success:
+            msg = messages[0]
+            reply = QMessageBox.information(
+                self, "Import complete",
+                f"{msg}\n\nWould you like to load this codeset now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                # Signal parent to load the new codeset if a batch is open
+                parent = self.parent()
+                if isinstance(parent, MainWindow) and parent._batch:
+                    try:
+                        cs = Codeset()
+                        cs.load(out_path)
+                        parent._codeset = cs
+                        parent._batch.codeset_path = out_path
+                        parent._batch.codeset_name = cs.name
+                        parent._rebuild_organism_buttons()
+                        parent._set_status(f"Codeset loaded: {cs.name}")
+                    except Exception as e:
+                        QMessageBox.warning(
+                            self, "Could not load codeset", str(e))
+                else:
+                    QMessageBox.information(
+                        self, "Note",
+                        "Codeset saved. Open a new batch to use it.")
+            self.accept()
+        else:
+            self._validation_output.setPlainText(
+                "Import failed:\n" + "\n".join(messages))

@@ -36,7 +36,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 @dataclass
@@ -64,6 +64,10 @@ class ImageEntry:
         self.grid_cols: int = 0
         self.grid_n: int = 0
         self._point_data: dict = {}
+        # GPS from EXIF — None if not present
+        self.gps_lat: Optional[float] = None
+        self.gps_lon: Optional[float] = None
+        self.gps_alt: Optional[float] = None
 
     @property
     def image_filename(self) -> str:
@@ -93,6 +97,9 @@ class ImageEntry:
             "grid_rows": self.grid_rows,
             "grid_cols": self.grid_cols,
             "grid_n": self.grid_n,
+            "gps_lat": self.gps_lat,
+            "gps_lon": self.gps_lon,
+            "gps_alt": self.gps_alt,
             "points": self._point_data,
         }
 
@@ -106,6 +113,9 @@ class ImageEntry:
         entry.grid_rows = data.get("grid_rows", 0)
         entry.grid_cols = data.get("grid_cols", 0)
         entry.grid_n = data.get("grid_n", 0)
+        entry.gps_lat = data.get("gps_lat")
+        entry.gps_lon = data.get("gps_lon")
+        entry.gps_alt = data.get("gps_alt")
         entry._point_data = data.get("points", {})
         return entry
 
