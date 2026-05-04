@@ -54,6 +54,9 @@ DETAILED_COLUMNS = [
     "data_collector",
     "sample_processing_person",
     "photo_filename",
+    "gps_lat",
+    "gps_lon",
+    "gps_alt",
     "point_number",
     "point_x",
     "point_y",
@@ -210,8 +213,11 @@ def export_detailed(
             for point in pm.points:
                 row = _base_row(meta, img)
                 row.update({
+                    "gps_lat":       img.gps_lat if img.gps_lat is not None else "",
+                    "gps_lon":       img.gps_lon if img.gps_lon is not None else "",
+                    "gps_alt":       img.gps_alt if img.gps_alt is not None else "",
                     "point_number":  point.index,
-                    "point_x":       round(point.x, 2),
+                    "point_x":       round(point.x, 2),   # pixel coords; 0.01px precision is sufficient
                     "point_y":       round(point.y, 2),
                     "organism_name": codeset.get_name(point.code) if point.code else "",
                     "point_notes":   point.notes or "",

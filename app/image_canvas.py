@@ -110,7 +110,11 @@ class ImageCanvas(QWidget):
 
     def set_points(self, points: list, code_colors: dict[str, str]) -> None:
         self._points = points
-        self._code_colors = {code: QColor(color) for code, color in code_colors.items()}
+        _fallback = QColor(180, 180, 180)
+        self._code_colors = {
+            code: (c if (c := QColor(color)).isValid() else _fallback)
+            for code, color in code_colors.items()
+        }
         self._selected_indices = set()
         self.update()
 
