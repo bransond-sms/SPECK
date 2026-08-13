@@ -75,9 +75,10 @@ if !errorlevel! neq 0 (
 )
 
 echo.
-echo [4/5] Creating a Desktop shortcut...
+echo [4/5] Creating a shortcut next to the SPECK folder...
+for %%I in ("%~dp0..") do set "PARENT_DIR=%%~fI"
 powershell -Command ^
-    "$s = (New-Object -COM WScript.Shell).CreateShortcut('%USERPROFILE%\Desktop\SPECK.lnk');" ^
+    "$s = (New-Object -COM WScript.Shell).CreateShortcut('!PARENT_DIR!\SPECK.lnk');" ^
     "$s.TargetPath = '%~dp0SPECK.bat';" ^
     "$s.WorkingDirectory = '%~dp0';" ^
     "$s.Save()"
@@ -85,8 +86,8 @@ powershell -Command ^
 echo.
 echo [5/5] All done!
 echo ============================================
-echo   SPECK is installed. Use the "SPECK" icon
-echo   on your Desktop to launch it from now on.
+echo   SPECK is installed. Use the "SPECK" shortcut
+echo   next to the SPECK folder to launch it from now on.
 echo   You will not need to run this installer again
 echo   unless Drake sends you an update.
 echo ============================================
