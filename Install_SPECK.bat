@@ -54,6 +54,7 @@ if defined FOUND_CONDA (
         exit /b 1
     )
     echo       Miniforge installed successfully.
+    echo This file marks that the SPECK installer installed Miniforge on this machine, so Uninstall_SPECK.bat knows it is safe to remove. Do not delete this file manually. > "!MINIFORGE_DIR!\.installed_by_speck"
 )
 
 echo.
