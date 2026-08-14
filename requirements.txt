@@ -1,2 +1,5 @@
 PyQt6>=6.4.0
 PyQt6-Qt6>=6.4.0
+numpy
+Pillow
+shapely
