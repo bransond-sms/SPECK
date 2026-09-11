@@ -37,7 +37,7 @@ if defined FOUND_CONDA (
     if not exist "%TEMP%\miniforge_installer.exe" (
         echo.
         echo       ERROR: Download failed. Check your internet connection and try again.
-        echo       If this keeps happening, copy this message and send it to Drake.
+        echo       If this keeps happening, copy this message and send it to David Branson.
         pause
         exit /b 1
     )
@@ -49,7 +49,7 @@ if defined FOUND_CONDA (
     if not exist "!MINIFORGE_DIR!\condabin\conda.bat" (
         echo.
         echo       ERROR: Miniforge install did not complete as expected.
-        echo       Copy this message and send it to Drake.
+        echo       Copy this message and send it to David Branson.
         pause
         exit /b 1
     )
@@ -70,7 +70,7 @@ if !errorlevel! equ 0 (
 
 if !errorlevel! neq 0 (
     echo.
-    echo       ERROR: Environment setup failed. Copy the messages above and send them to Drake.
+    echo       ERROR: Environment setup failed. Copy the messages above and send them to David Branson.
     pause
     exit /b 1
 )
@@ -90,7 +90,7 @@ echo ============================================
 echo   SPECK is installed. Use the "SPECK" shortcut
 echo   next to the SPECK folder to launch it from now on.
 echo   You will not need to run this installer again
-echo   unless Drake sends you an update.
+echo   unless David Branson sends you an update.
 echo ============================================
 echo.
 pause

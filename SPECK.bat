@@ -31,6 +31,6 @@ python main.py
 
 if !errorlevel! neq 0 (
     echo.
-    echo SPECK exited with an error. Copy the messages above and send them to Drake.
+    echo SPECK exited with an error. Copy the messages above and send them to David Branson.
     pause
 )

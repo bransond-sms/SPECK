@@ -8,4 +8,3 @@ dependencies:
       - PyQt6
       - numpy
       - Pillow
-      - shapely

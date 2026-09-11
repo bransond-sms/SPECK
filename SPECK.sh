@@ -26,6 +26,6 @@ python main.py
 
 if [ $? -ne 0 ]; then
     echo
-    echo "SPECK exited with an error. Copy the messages above and send them to Drake."
+    echo "SPECK exited with an error. Copy the messages above and send them to David Branson."
     read -p "Press Return to close this window..."
 fi

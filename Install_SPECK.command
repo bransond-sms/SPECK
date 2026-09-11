@@ -33,7 +33,7 @@ else
     if [ ! -f "$INSTALLER" ]; then
         echo
         echo "      ERROR: Download failed. Check your internet connection and try again."
-        echo "      If this keeps happening, copy this message and send it to Drake."
+        echo "      If this keeps happening, copy this message and send it to David Branson."
         read -p "Press Return to close this window..."
         exit 1
     fi
@@ -45,7 +45,7 @@ else
     if [ ! -f "$MINIFORGE_DIR/bin/conda" ]; then
         echo
         echo "      ERROR: Miniforge install did not complete as expected."
-        echo "      Copy this message and send it to Drake."
+        echo "      Copy this message and send it to David Branson."
         read -p "Press Return to close this window..."
         exit 1
     fi
@@ -65,7 +65,7 @@ fi
 
 if [ $? -ne 0 ]; then
     echo
-    echo "      ERROR: Environment setup failed. Copy the messages above and send them to Drake."
+    echo "      ERROR: Environment setup failed. Copy the messages above and send them to David Branson."
     read -p "Press Return to close this window..."
     exit 1
 fi
@@ -85,7 +85,7 @@ echo "============================================"
 echo "  SPECK is installed. Use the \"SPECK\" shortcut"
 echo "  next to the SPECK folder to launch it from now on."
 echo "  You will not need to run this installer again"
-echo "  unless Drake sends you an update."
+echo "  unless David Branson sends you an update."
 echo "============================================"
 echo
 read -p "Press Return to close this window..."
