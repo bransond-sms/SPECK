@@ -32,6 +32,8 @@ To uninstall, run `Uninstall_SPECK.bat` (Windows) or `Uninstall_SPECK.command` (
 
 Full walkthrough and troubleshooting: [docs/SPECK_Installation_Guide.pdf](docs/SPECK_Installation_Guide.pdf).
 
+Once installed, see [docs/SPECK_User_Guide.pdf](docs/SPECK_User_Guide.pdf) for a full walkthrough of the app (also available from the **Help → User Guide** menu).
+
 ### For developers
 
 If you'd rather manage your own Python environment instead of using the installer scripts:
@@ -81,7 +83,8 @@ SPECK/
 │   └── sms_morphofunctional.json
 ├── sessions/                     # Default session save location
 └── docs/
-    └── SPECK_Installation_Guide.pdf
+    ├── SPECK_Installation_Guide.pdf
+    └── SPECK_User_Guide.pdf
 ```
 
 ## Contributing
@@ -90,7 +93,7 @@ Contributions are welcome. If you maintain a code set for a different research c
 
 ## License
 
-MIT License. See LICENSE for details.
+GNU General Public License v3.0 (GPL-3.0). See LICENSE for details.
 
 ## Acknowledgements
 

@@ -20,9 +20,9 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QFormLayout, QComboBox, QSpinBox,
     QGridLayout, QSizePolicy, QTextEdit, QColorDialog
 )
-from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSlot
+from PyQt6.QtCore import Qt, QSize, QSettings, QUrl, pyqtSlot
 from PyQt6.QtGui import (
-    QAction, QKeySequence, QFont, QColor, QIcon, QPixmap
+    QAction, QKeySequence, QFont, QColor, QIcon, QPixmap, QDesktopServices
 )
 
 from app.image_canvas import ImageCanvas, SUPPORTED_EXTENSIONS
@@ -198,6 +198,9 @@ class MainWindow(QMainWindow):
 
         # Help
         help_menu = mb.addMenu("&Help")
+        act_user_guide = QAction("&User Guide", self)
+        act_user_guide.triggered.connect(self._on_user_guide)
+        help_menu.addAction(act_user_guide)
         act_about = QAction("&About SPECK", self)
         act_about.triggered.connect(self._on_about)
         help_menu.addAction(act_about)
@@ -805,6 +808,16 @@ class MainWindow(QMainWindow):
     def _on_import_taxon_csv(self):
         dlg = TaxonCSVImportDialog(self)
         dlg.exec()
+
+    def _on_user_guide(self):
+        guide_path = os.path.join("docs", "SPECK_User_Guide.pdf")
+        if not os.path.exists(guide_path):
+            QMessageBox.warning(
+                self, "User Guide Not Found",
+                f"Could not find {guide_path}."
+            )
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(guide_path)))
 
     def _on_about(self):
         QMessageBox.about(
