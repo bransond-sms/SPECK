@@ -22,7 +22,7 @@ SPECK is an open-source desktop application for point-count image analysis. It i
 
 The recommended way to install SPECK is with the bundled installer scripts. They set up an isolated Python environment automatically, so there's nothing to install ahead of time.
 
-1. On the [SPECK GitHub page](https://github.com/bransond-sms/SPECK), click **Code → Download ZIP**, then extract it wherever you want the launch shortcut to appear.
+1. Download [docs/SPECK_Standalone_Install.zip](docs/SPECK_Standalone_Install.zip) and extract it wherever you want the launch shortcut to appear. (Alternatively, click **Code → Download ZIP** on the [SPECK GitHub page](https://github.com/bransond-sms/SPECK) — same contents.)
 2. From inside the extracted folder, run the installer for your platform:
    - **Windows:** double-click `Install_SPECK.bat`
    - **macOS:** double-click `Install_SPECK.command` (first time only, right-click it and choose **Open** instead of double-clicking)
@@ -84,7 +84,8 @@ SPECK/
 ├── sessions/                     # Default session save location
 └── docs/
     ├── SPECK_Installation_Guide.pdf
-    └── SPECK_User_Guide.pdf
+    ├── SPECK_User_Guide.pdf
+    └── SPECK_Standalone_Install.zip  # Full repo bundle for the ZIP+installer flow
 ```
 
 ## Contributing
